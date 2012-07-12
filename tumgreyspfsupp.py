@@ -3,15 +3,21 @@
 #  Copyright (c) 2004-2007, Sean Reifschneider, tummy.com, ltd.
 #  All Rights Reserved.
 
-S_rcsid = '$Id: tumgreyspfsupp.py,v 1.8 2007-06-10 01:11:11 jafo Exp $'
-
-import syslog, os, sys, ipaddr, re #, urllib
+import syslog, os, sys, re
 from pymongo import Connection, DESCENDING
 from collections import MutableMapping
 
+try:
+    from ipaddr import ip_network
+except ImportError:
+    # No PEP 3144 interface yet. Fall back.
+    from ipaddr import IPNetwork
+    ip_network = IPNetwork
+
+__version__ = '0.1-mongo'
 
 #  default values
-default_config_file = '/Users/jschrewe/webdesign/tumgreyspf/tumgreyspf.conf'
+default_config_file = '/etc/tumgreyspf/tumgreyspf.conf'
 
 default_config = {
     'debugLevel': 0,
@@ -84,7 +90,7 @@ class ConfigData(MutableMapping):
             syslog.syslog(msg)
         
     def _process_ips(self, ips):
-        return [ipaddr.ip_network(i) for i in ips]
+        return [ip_network(i) for i in ips]
         
     def _process_checkers(self, checkers):
         return [c.strip().lower() for c in checkers]
@@ -167,10 +173,14 @@ class ExceptHook(object):
 def prepare_start(use_syslog=True, use_stderr=False):
     sys.excepthook = ExceptHook(use_syslog, use_stderr)
     
+    if use_syslog:
+        syslog.openlog(os.path.basename(sys.argv[0]), syslog.LOG_PID, syslog.LOG_MAIL)
+    
     config_file = default_config_file
     if len(sys.argv) > 1:
         if sys.argv[1] in ['-?', '--help', '-h',]:
-            print 'usage: %s [<configfilename>]' % sys.argv[0]
+            
+            print 'usage: %s [<configfilename>]' % os.path.basename(sys.argv[0])
             sys.exit(1)
             
         config_file = sys.argv[1]
@@ -180,24 +190,6 @@ def prepare_start(use_syslog=True, use_stderr=False):
     
     return config, db
 
-
-####################
-#def quoteAddress(s):
-#    '''Quote an address so that it's safe to store in the file-system.
-#    Address can either be a domain name, or local part.
-#    Returns the quoted address.'''
-#
-#    s = urllib.quote(s, '@_-+')
-#    if len(s) > 0 and s[0] == '.': 
-#        s = '%2e' + s[1:]
-#    return s
-#
-#
-#######################
-#def unquoteAddress(s):
-#    '''Undo the quoting of an address.  Returns the unquoted address.'''
-#
-#    return urllib.unquote(s)
 
 class DbConnection(object):
     """
@@ -261,170 +253,4 @@ class InstanceCheck(object):
             return False
         return True
 
-###############################################################
-#commentRx = re.compile(r'^(.*)#.*$')
-#
-#def readConfigFile(path, configData={}, configGlobal={}):
-#    '''Reads a configuration file from the specified path, merging it
-#    with the configuration data specified in configData.  Returns a
-#    dictionary of name/value pairs based on configData and the values
-#    read from path.'''
-#    
-#    configGlobal.log_msg('readConfigFile: Loading "%s"' % path, 3)
-#    
-#    nameConversion = {
-#        'SPFSEEDONLY' : bool,
-#        'GREYLISTTIME' : int,
-#        'CHECKERS' : str,
-#        'OTHERCONFIGS' : str,
-#        'GREYLISTEXPIREDAYS' : float,
-#    }
-#
-#    try:
-#        fp = open(path, 'r')
-#    except IOError, e:
-#        syslog.syslog('ERROR: Couldn\'t open config file"%s": %s' % (path, str(e)))
-#        return configData
-#
-#    for line in fp:
-#        # ignore comments
-#        line = line.split('#', 1)[0].strip()
-#        if not line: 
-#            continue
-#        
-#        try:
-#            name, value = line.split('=', 1)
-#        except ValueError:
-#            syslog.syslog('ERROR parsing line "%s" from file "%s"' % (line, path))
-#            continue
-#        
-#        name = name.strip()
-#        value = value.strip()
-#
-#        #  check validity of name
-#        try:
-#            conversion = nameConversion[name]
-#        except KeyError:
-#            syslog.syslog('ERROR: Unknown name "%s" in file "%s"' % (name, path))
-#            continue
-#
-#        configGlobal.log_msg('readConfigFile: Found entry "%s=%s"' % (name, value), 4)
-#            
-#        configData[name] = conversion(value)
-#        
-#    fp.close()
-#    
-#    return configData
 
-
-#####################################################
-#def lookupConfig(configPath, msgData, configGlobal):
-#    '''Given a path, load the configuration as dictated by the
-#    msgData information.  Returns a dictionary of name/value pairs.'''
-#
-#    #  set up default config
-#    configData = {
-#        'SPFSEEDONLY': configGlobal['defaultSeedOnly'],
-#        'GREYLISTTIME': configGlobal['defaultAllowTime'],
-#        'CHECKGREYLIST': 1,
-#        'CHECKSPF': 1,
-#        'OTHERCONFIGS': 'envelope_sender,envelope_recipient',
-#    }
-#
-#    #  load directory-based config information
-#    if configPath[:8] != 'file:///':
-#        syslog.syslog('ERROR: Unknown path type in: "%s", using defaults' % msgData)
-#        return configData
-#        
-#    configGlobal.log_msg('lookupConfig: Starting file lookup from "%s"' % configPath, 3)
-#        
-#    basePath = configPath[7:]
-#    configData = {}
-#
-#    #  load default config
-#    path = os.path.join(basePath, '__default__')
-#    
-#    if os.path.exists(path):
-#        configGlobal.log_msg('lookupConfig: Loading default config: "%s"' % path, 3)
-#        configData = readConfigFile(path, configData, configGlobal)
-#    else:
-#        syslog.syslog('lookupConfig: No default config found in "%s", this is probably an install problem.' % path)
-#
-#    # check if other configs need to be loaded
-#    otherConfigs = configData.get('OTHERCONFIGS', '').split(',')
-#    if not otherConfigs or otherConfigs == ['']: 
-#        return configData
-#    
-#    configGlobal.log_msg('lookupConfig: Starting load of configs: "%s"' % str(otherConfigs), 3)
-#
-#    #  load other configs from OTHERCONFIGS
-#    configsAlreadyLoaded = []
-#        
-#    #  SENDER/RECIPIENT
-#    for cfgType in otherConfigs:
-#        cfgType = cfgType.strip()
-#
-#        #  skip if already loaded
-#        if cfgType in configsAlreadyLoaded: 
-#            continue
-#            
-#        configsAlreadyLoaded + [cfgType] 
-#        configGlobal.log_msg('lookupConfig: Trying config "%s"' % cfgType, 3) 
-#
-#        #  SENDER/RECIPIENT
-#        if cfgType == 'envelope_sender' or cfgType == 'envelope_recipient':
-#            #  get address
-#            if cfgType == 'envelope_sender': 
-#                address_key = 'sender'
-#            else: 
-#                address_key = 'recipient'
-#                
-#            try:
-#                address = msgData[address_key]
-#            except KeyError:
-#                configGlobal.log_msg('lookupConfig: Could not find %s' % cfgType, 2) 
-#                continue
-#
-#            #  split address into domain and local
-#            try:
-#                local, domain = address.split('@', 1)
-#            except ValueError:
-#                configGlobal.log_msg('lookupConfig: Could not find %s address '
-#                                    'from "%s", skipping' % (cfgType, address), 2) 
-#                continue
-#            local = quoteAddress(local)
-#            domain = quoteAddress(domain)
-#
-#            #  load configs
-#            path = os.path.join(basePath, cfgType)
-#            domainPath = os.path.join(path, domain, '__default__')
-#            localPath = os.path.join(path, domain, local)
-#            for name in [domainPath, localPath]:
-#                configGlobal.log_msg('lookupConfig: Trying file "%s"' % name, 3) 
-#                if os.path.exists(name):
-#                    configData = readConfigFile(name, configData, configGlobal)
-#
-#        #  CLIENT IP ADDRESS
-#        elif cfgType == 'client_address':
-#            try:
-#                ip = msgData['client_address']
-#            except KeyError:
-#                configGlobal.log_msg('lookupConfig: Could not find client address', 2) 
-#                continue
-#            
-#            path = basePath
-#            for name in ['client_address', ] + ip.split('.'):
-#                path = os.path.join(path, name)
-#                defaultPath = os.path.join(path, '__default__')
-#                configGlobal.log_msg('lookupConfig: Trying file "%s"' % defaultPath, 3) 
-#                if os.path.exists(defaultPath):
-#                    configData = readConfigFile(defaultPath, configData, configGlobal)
-#            configGlobal.log_msg('lookupConfig: Trying file "%s"' % path, 3) 
-#            if os.path.exists(path):
-#                configData = readConfigFile(path, configData, configGlobal)
-#
-#            #  unknown configuration type
-#        else:
-#            syslog.syslog('ERROR: Unknown configuration type: "%s"' % cfgType)
-#
-#    return configData

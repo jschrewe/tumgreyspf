@@ -8,7 +8,6 @@
 #  <jafo@tummy.com>
 
 import sys, time
-sys.path.append('/Users/jschrewe/webdesign/tumgreyspf')
 from tumgreyspfsupp import prepare_start
 
 config, db = prepare_start(use_syslog=False, use_stderr=True)
