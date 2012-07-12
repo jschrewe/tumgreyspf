@@ -1,8 +1,10 @@
-tumgreyspf README
+# tumgreyspf README
+
 Sean Reifschneider <jafo@tummy.com>
-Homepage: http://www.tummy.com/Community/software/tumgreyspf/
-Code/bugfixes: https://github.com/linsomniac/tumgreyspf
-=============================================================
+**Homepage:** http://www.tummy.com/Community/software/tumgreyspf/
+**Code/bugfixes:** https://github.com/linsomniac/tumgreyspf
+
+--------------------------------------------------------------
 
 This is tumgreyspf, an external policy checker for the postfix mail
 server.  It can optionally greylist and/or use spfquery to check SPF
@@ -11,100 +13,98 @@ records to determine if email should be accepted by your server.
 It uses the file-system as it's database, no additional database is
 required to use it.
 
-LICENSE
+## LICENSE
 
    tumgreyspf is licensed under the GPL.
 
-BENEFITS
+## BENEFITS
 
-   High Accuracy
-      SPF is information published by the domain owner about what systems
-      may legitimately send e-mail for the domain.  Greylisting takes
-      advantage of spam and viruses that do not follow the RFCs and retry
-      deliveries on temporary failure.  We use these checks as part of our
-      mail system and have seen several orders of magnitude reduction in
-      spam, lower system load, and few problems with legitimate mail
-      getting blocked.
+### High Accuracy
 
-   Low Maintenance
-      tumgreyspf requires no regular attention from the administrator to
-      remain effective.
+SPF is information published by the domain owner about what systems
+may legitimately send e-mail for the domain.  Greylisting takes
+advantage of spam and viruses that do not follow the RFCs and retry
+deliveries on temporary failure.  We use these checks as part of our
+mail system and have seen several orders of magnitude reduction in
+spam, lower system load, and few problems with legitimate mail
+getting blocked.
 
-   Easy Setup
-      Installation should be as easy as installing an RPM or Debian package
-      on your system.  There are few additional requirements.  Extensive
-      time has been devoted to installation automation and documentation.
+### Low Maintenance
 
-REQUIREMENTS
+tumgreyspf requires no regular attention from the administrator to
+remain effective.
 
-   Python
-      http://www.python.org/
+### Easy Setup
 
-   Postfix 2.1 or above
-      http://www.postfix.org/
+Installation should be as easy as installing an RPM or Debian package
+on your system.  There are few additional requirements.  Extensive
+time has been devoted to installation automation and documentation.
 
-   Optional: spfquery or pyspf
-      http://www.libspf2.org/
-      http://spf.pobox.com/downloads.html
-      http://www.wayforward.net/spf/
+## REQUIREMENTS
 
-NOTE BEFORE YOU USE TUMGREYSPF
+   * [Python](http://www.python.org/)
 
-   tumgreyspf stores the greylist data in the file-system using many small
-   files.  This has a few benefits, namely that you do not need to install
-   or configure any database software.  It also makes you immune to to
-   database corruption issues that other greylist systems have.
+   * [Postfix 2.1 or above](http://www.postfix.org/)
 
-   However, this does mean that if not configured properly you may
-   experience extremely poor performance.  There are details in one of my
-   blog posts:
+   * *Optional:* [spfquery](http://spf.pobox.com/downloads.html) or [pyspf](http://www.wayforward.net/spf/)
 
-      http://www.tummy.com/journals/entries/jafo_20051001_003419
+## NOTE BEFORE YOU USE TUMGREYSPF
 
-   However, the short answer is that you need to be careful about blocking
-   known bad recipient and sender addresses in Postfix before handing
-   messages off to tumgreyspf, and you probably should configure SPF to be
-   checked before greylisting.
+tumgreyspf stores the greylist data in the file-system using many small
+files.  This has a few benefits, namely that you do not need to install
+or configure any database software.  It also makes you immune to to
+database corruption issues that other greylist systems have.
 
-   If you are going to be storing your tumgreyspf database on an "ext2" or
-   "ext3" file-system, you have to be particularly careful about this
-   problem.
+However, this does mean that if not configured properly you may
+experience extremely poor performance. There are details in one of my
+blog posts:
 
-   I have run a number of production e-mail servers using this with
-   extremely good results and absolutely no problems, however I do
-   acknowledge that there is a potential for problems.  Read the above URL
-   for more details on preventing these problems.
+    http://www.tummy.com/journals/entries/jafo_20051001_003419
 
-   Over the last 18 months that it's been in use, and more than a year that
-   it's been publicly available, I've received many responses saying that
-   it worked great, and one blog post reporting the above problems.
-   tumgreyspf may not be for everyone, but many people do find it useful.
+However, the short answer is that you need to be careful about blocking
+known bad recipient and sender addresses in Postfix before handing
+messages off to tumgreyspf, and you probably should configure SPF to be
+checked before greylisting.
 
-QUICK-START INSTALL
+If you are going to be storing your tumgreyspf database on an "ext2" or
+"ext3" file-system, you have to be particularly careful about this
+problem.
 
-   There is a script called "tumgreyspf-install" provided with this
-   software.  I have had a report that it didn't work, so I would recommend
-   against running it, instead see the "INSTALL INSTRUCTIONS" section at
-   the end of this document for manual installation instructions.  The
-   install process is fairly easy, requiring some simple changes to the
-   Postfix configuration files.
+I have run a number of production e-mail servers using this with
+extremely good results and absolutely no problems, however I do
+acknowledge that there is a potential for problems.  Read the above URL
+for more details on preventing these problems.
 
-LOGGING
+Over the last 18 months that it's been in use, and more than a year that
+it's been publicly available, I've received many responses saying that
+it worked great, and one blog post reporting the above problems.
+tumgreyspf may not be for everyone, but many people do find it useful.
 
-   tumgreyspf will log messages to syslog about it's activities.  The
-   "debugLevel" value in "tumgreyspf.conf" can be increased to get
-   additional information to be logged.  When set to a value of "0", only
-   test results (greylist/SPF hits/misses) are logged.  Look for
-   "tumgreyspf" in your mail log files.
+## QUICK-START INSTALL
 
-TESTING
+There is a script called "tumgreyspf-install" provided with this
+software.  I have had a report that it didn't work, so I would recommend
+against running it, instead see the "INSTALL INSTRUCTIONS" section at
+the end of this document for manual installation instructions.  The
+install process is fairly easy, requiring some simple changes to the
+Postfix configuration files.
 
-   The best way to test tumgreyspf is to simulate SMTP connections, then
-   watch the logs and look in the ".../data/" directory for greylist
-   settings.  This testing probably needs to be done from a remote system.
+## LOGGING
 
-   For example, suppose we have a machine "10.9.8.7" that we want to run
-   tests against our mail server "10.1.2.3":
+tumgreyspf will log messages to syslog about it's activities.  The
+"debugLevel" value in "tumgreyspf.conf" can be increased to get
+additional information to be logged.  When set to a value of "0", only
+test results (greylist/SPF hits/misses) are logged.  Look for
+"tumgreyspf" in your mail log files.
+
+## TESTING
+
+The best way to test tumgreyspf is to simulate SMTP connections, then
+watch the logs and look in the ".../data/" directory for greylist
+settings.  This testing probably needs to be done from a remote system.
+
+For example, suppose we have a machine "10.9.8.7" that we want to run
+tests against our mail server "10.1.2.3":
 
       Log into 10.9.8.7.
       Run "telnet 10.1.2.3 25"
@@ -112,9 +112,9 @@ TESTING
       Type "mail from: <user1@example.com>"
       Type "rcpt to: <user2@example.com>"
 
-   Note that "user2@example.com" needs to be a valid local e-mail address
-   in most cases, and that "user1@example.com" is subject to SPF blocking.
-   The first time you do this, you should receive the response:
+Note that "user2@example.com" needs to be a valid local e-mail address
+in most cases, and that "user1@example.com" is subject to SPF blocking.
+The first time you do this, you should receive the response:
 
       450 <user2@example.com>: Recipient address rejected: Service
       unavailable, greylisted.
@@ -158,19 +158,19 @@ TESTING
    "CONFIGURATION" section below), or change your SPF configuration so that
    it allows mail from your test machine.
 
-CONFIGURATION
+## CONFIGURATION
 
-   NOTE: After changing "tumgreyspf.conf", you should run
+   **NOTE:** After changing "tumgreyspf.conf", you should run
    "tumgreyspf-configtest" to ensure that it's correct.  This only applies
    to changes made to the "tumgreyspf.conf" master configuration file.
 
    Configurations are processed from the top down, in the order specified
-   by "OTHERCONFIGS".  So, settings in a top-level __default__ file will be
+   by "OTHERCONFIGS".  So, settings in a top-level \_\_default\_\_ file will be
    overridden if set in a configuration below that top level.
 
-   There is the __default__ file at the top level that is used as a
+   There is the \_\_default\_\_ file at the top level that is used as a
    default for all decisions. If you wish to disable SPF or greylist for
-   a specific IP/subnet/sender/recipient, you simply make a __default__
+   a specific IP/subnet/sender/recipient, you simply make a \_\_default\_\_
    file in a subdirectory under config matching the entity you wish to
    match, with SPF or other checks disabled.
 
@@ -179,7 +179,7 @@ CONFIGURATION
       mkdir /var/spool/tumgreyspf/config/client_address/192/168/10/
       edit /var/spool/tumgreyspf/config/client_address/192/168/10/__default__
 
-   The __default__ file should contain:
+   The \_\_default\_\_ file should contain:
 
       SPFSEEDONLY=0
       GREYLISTTIME=300
@@ -187,13 +187,13 @@ CONFIGURATION
       OTHERCONFIGS=
 
    Note that for a specific IP address, the last component is a file,
-   having the same structure as the __default__.  For example, to block the
+   having the same structure as the \_\_default\_\_.  For example, to block the
    address "10.1.2.3", you would create a file named "3" under the
    directory ".../config/client_address/10/1/2".
 
    The above sets CHECKERS and OTHERCONFIGS to nothing, so for that subnet
    no checks are done.  All other IP address blocks are still using the top
-   level __default__
+   level \_\_default\_\_
 
    CONFIGURATION VALUES
 
@@ -384,7 +384,7 @@ INSTALL INSTRUCTIONS
          also be used.  If this is installed, tumgreyspf will automatically
          use it.
 
-COMMON PROBLEMS
+## COMMON PROBLEMS
 
    SPF checks need to be bypassed for relays for the domain, such as
    secondary MX servers.  Putting an mx entry in your SPF TXT record is

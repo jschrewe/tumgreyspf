@@ -6,90 +6,83 @@
 #  All Rights Reserved
 #  <jafo@tummy.com>
 
-import os, re, string, syslog, sys, time
-sys.path.append('/usr/local/lib/tumgreyspf')
-import tumgreyspfsupp
+import sys, time
+from collections import OrderedDict
 
-###################
-def syslogprint(s):
-	print s
-syslog.syslog = syslogprint
+import ipaddr
 
+sys.path.append('/Users/jschrewe/webdesign/tumgreyspf')
+from tumgreyspfsupp import prepare_start
 
-##################################
-def visit(config, dirname, fileList):
-	ospathisfile = os.path.isfile
-	ospathjoin = os.path.join
-	base = config['greylistBasedir']
-	rx = re.compile(r'^/?(\d+)/(\d+)/(\d+)/(\d+)/greylist/(.*)$')
-	if config['ignoreLastByte'] > 0:
-		rx = re.compile(r'^/?(\d+)/(\d+)/(\d+)/greylist/(.*)$')
-	didUnlink = 0
-	for file in fileList:
-		path = ospathjoin(dirname, file)
-		if not ospathisfile(path): continue
+config, db = prepare_start(use_syslog=False, use_stderr=True)
 
-		recipient = file
-		relative = dirname[len(base):]
-		m = rx.match(relative)
-		if not m:
-			print 'Unknown path "%s" found in greylist directory.' % relative
-			continue
-		ip = string.join(m.groups()[:-1], '.')
-		sender = m.groups()[-1]
+def prettysecs(seconds):
+    seconds = int(seconds)
+    
+    negative = False
+    if seconds < 0:
+        negative = True
+        seconds = seconds * -1
+        
+    secs = [
+        (86400, 'd'),
+        (3600, 'h'),
+        (60, 'm'),
+    ]
+    for p_secs, p_descr in secs:
+        if seconds > p_secs:
+            time = seconds / p_secs
+            if negative: time = time * -1
+            return '%d%s' % (time, p_descr)
+                
+    return '%ss' % seconds
 
-		#  look up expration day
-		data = {
-				'envelope_sender' : tumgreyspfsupp.unquoteAddress(sender),
-				'envelope_recipient' : tumgreyspfsupp.unquoteAddress(recipient),
-				'client_address' : ip,
-				}
-		configData = tumgreyspfsupp.lookupConfig(config.get('configPath'),
-				data, config.copy())
-		expireTime = time.time() - (configData['GREYLISTEXPIREDAYS'] * 86400)
-
-		#  check
-		statData = os.stat(path)
-		mtime = statData[8]
-		ctime = statData[9]
-		now = time.time()
-
-		#  status information
-		stats = ''
-		if ctime < mtime:
-			stats = stats + 'Blocked,'
-		if mtime > now:
-			stats = stats + 'Pending,'
-		if stats:
-			stats = ' (%s)' % stats[:-1]
-
-		def prettyseconds(seconds):
-			for prettySeconds, prettyDescription in (
-					( 86400, 'd' ),
-					( 3600, 'h' ),
-					( 60, 'm' ),
-					):
-				if seconds > prettySeconds:
-					return('%d%s' % ( seconds / prettySeconds, prettyDescription ))
-			return('%ss' % seconds)
-
-		#  display information
-		print ('IP=%s SENDER=%s RECIPIENT=%s STARTS=%s LAST=%s EXPIRESIN=%s%s'
-				% ( ip, sender, recipient, prettyseconds(now - mtime),
-					prettyseconds(now - ctime),
-					prettyseconds(int(expireTime - now)), stats ))
+entries = db.greylist.find()
+data = {}
+for e in entries:
+    expire_time = time.time() - (config['GREYLISTEXPIREDAYS'] * 86400)
+    now = time.time()
+    
+    stats = []
+    if e['changed'] < e['allowed_from']:
+        stats.append('Blocked')
+    if e['allowed_from'] > now:
+        stats.append('Pending')
+        
+    if len(stats) > 0:
+        stats = '(%s)' % ', '.join(stats)
+    else:
+        stats = ''
+    
+    ip = ipaddr.ip_address(e['client_ip'])
+    
+    data[ip] = {
+        'ip': ip,
+        'sender': e['sender'],
+        'recipient': e['recipient'],
+        'allowed_from': prettysecs(now - e['allowed_from']),
+        'last': prettysecs(now - e['changed']),
+        'expires': prettysecs(e['changed'] - expire_time),
+        'stats': stats,
+    }
 
 
-############################
-#  main code
-config = tumgreyspfsupp.processConfigFile()
-greylistBasedir = os.path.join(config['greylistDir'], 'client_address')
-config['greylistBasedir'] = greylistBasedir
-try:
-	os.path.walk(greylistBasedir, visit, config)
+ordered_data = OrderedDict(sorted(data.items(), key=lambda item: item[0]))
 
-#  ignore interrupts and errors writing stdout
-except IOError, e:
-	if e.errno != 32: raise
-except KeyboardInterrupt:
-	pass
+for i in ordered_data.itervalues():
+    if i['allowed_from'][0] == '-':
+        in_or_since = 'IN'
+        i['allowed_from'] = i['allowed_from'][1:]
+    else:
+        in_or_since = 'SINCE'
+        
+    print 'IP: %s\t%s\n    SENDER: %s\n    RECIPIENT: %s\n    ALLOWED %s: %s\n    LAST SEEN: %s\n    EXPIRES IN: %s\n' % (
+        i['ip'],
+        i['stats'],
+        i['sender'], 
+        i['recipient'],
+        in_or_since,
+        i['allowed_from'],
+        i['last'],
+        i['expires'],
+    )
