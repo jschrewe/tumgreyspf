@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-from setuptools import setup
+from distutils2.core import setup
 
 setup(
     name = 'tumgreyspf',
@@ -8,7 +8,8 @@ setup(
     maintainer_email = 'jan@schafproductions.com',
     version = 'mongo-0.1',
     license = 'GPL v2',
-    install_requires=['ipaddr', 'pymongo',],
+    include_package_data=True,
+    requires=['ipaddr', 'pymongo',],
     py_modules = ['tumgreyspfsupp'],
     scripts = [
         'tumgreyspf',
