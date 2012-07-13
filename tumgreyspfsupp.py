@@ -26,6 +26,7 @@ default_config = {
     'ignoreLastByte': True,
     'greylistByIPOnly': False,
     'spfAcceptOnPermError': True,
+    'spfBypassGreylist': False,
     'greylistExpireDays': 10.0,
     'checkers': ['spf', 'greylist', ],
     'spfSeedOnly': False,
@@ -79,15 +80,20 @@ class ConfigData(MutableMapping):
     _config = {}
     _dbg_lvl = None
     
-    def __init__(self, config_dict=None):
+    def __init__(self, config_dict=None, use_syslog=True, use_stderr=False):
         if config_dict is None:
             self.update(default_config)
         else:
             self.update(config_dict)
+            
+        self.use_syslog, self.use_stderr = use_syslog, use_stderr
         
     def log_msg(self, msg, lvl=None):
         if lvl is None or self._dbg_lvl >= lvl:
-            syslog.syslog(msg)
+            if self.use_syslog:
+                syslog.syslog(msg)
+            if self.use_stderr:
+                sys.stderr.write(msg + '\n')
         
     def _process_ips(self, ips):
         return [ip_network(i) for i in ips]
@@ -132,7 +138,7 @@ def load_config(filename=default_config_file, config={}, use_syslog=True, use_st
     '''Load the specified config file, exit and log errors if it fails,
     otherwise return a config dictionary.'''
 
-    conf = ConfigData()
+    conf = ConfigData(use_syslog=use_syslog, use_stderr=use_stderr)
     conf.update(config)
 
     try:
@@ -152,7 +158,6 @@ def load_config(filename=default_config_file, config={}, use_syslog=True, use_st
         sys.exit(1)
 
     return conf
-
 
 
 class ExceptHook(object):
@@ -233,6 +238,7 @@ class DbConnection(object):
         if self._db is None:
             self.connect()
         return getattr(self._db, attr)
+
 
 class InstanceCheck(object):
     _instances = []

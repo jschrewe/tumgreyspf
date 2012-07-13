@@ -7,7 +7,7 @@
 #  All Rights Reserved
 #  <jafo@tummy.com>
 
-import syslog, sys, time, spf
+import sys, time, spf
 
 try:
     from ipaddr import ip_address
@@ -34,7 +34,7 @@ def skip_ip(ip, ipaddrs):
     return False
 
 
-def spfcheck(data, config):  #{{{1
+def spfcheck(data, config):
     queue_id = 'QUEUE_ID="%s"' % data.get('queue_id')
     
     try:
@@ -66,13 +66,12 @@ def spfcheck(data, config):  #{{{1
 
     #  use the pySPF 2.0/RFC 4408 interface
     try:
-        spfReason, spfResult = spf.check2(i=ip, s=sender, h=helo)
+        spfResult, spfReason = spf.check2(i=ip, s=sender, h=helo)
     except Exception, e:
         return ('prepend', 'TumGreySPF-Warning: SPF Check failed: %s' % str(e))
 
+    spfResult = spfResult.strip().lower().capitalize()
     spfReason = spfReason.strip()
-    spfResult = spfResult.strip()
-    spfResult = spfResult.lower().capitalize()
         
     if spfResult == 'None':
         #  allow checking to continue on to other checkers if no SPF
@@ -84,13 +83,13 @@ def spfcheck(data, config):  #{{{1
         identity = 'helo'
         
     spfDetail = 'identity=%s; client-ip=%s; helo=%s; envelope-from=%s; receiver=%s; ' % (
-                    identity,
-                    data.get('client_address'),
-                    data.get('helo_name'),
-                    data.get('sender'),
-                    data.get('recipient'),
-                )
-    syslog.syslog('%s: %s; %s' % (spfReason, queue_id, spfDetail))
+        identity,
+        data.get('client_address'),
+        data.get('helo_name'),
+        data.get('sender'),
+        data.get('recipient'),
+    )
+    config.log_msg('%s: %s; %s' % (spfReason, queue_id, spfDetail))
         
     if spfResult == 'Fail':
         return ('reject', '%s SPF Reports: %s' % (queue_id, spfReason))
@@ -100,6 +99,10 @@ def spfcheck(data, config):  #{{{1
 
     if spfResult == 'Temperror':
         return ('defer', '%s SPF Reports: %s' % (queue_id, spfReason))
+    
+    # SPF validated mails can pass
+    if spfResult == 'Pass' and config['spfBypassGreylist']:
+        return 'pass', '%s SPF Reports: %s' % (queue_id, spfReason)
 
     return ('prepend', 'Received-SPF: %s (%s) %s' % (spfResult, spfReason, spfDetail))
 
@@ -150,23 +153,22 @@ def greylistcheck(data, config):
         db.greylist.update(criteria, {"$set": greylist_data}, upsert=True)
 
         if config['defaultSeedOnly']:
-            syslog.syslog(
-                    'Training greylisting: REMOTEIP="%s" HELO="%s" SENDER="%s" '
-                    'RECIPIENT="%s" QUEUEID="%s"'
-                    % (data.get('client_address'),
-                        data.get('helo_name'),
-                        data.get('sender'),
-                        data.get('recipient'),
-                        data.get('queue_id'),))
+            config.log_msg('Training greylisting: REMOTEIP="%s" HELO="%s" SENDER="%s" RECIPIENT="%s" QUEUEID="%s"' % (
+                data.get('client_address'),
+                data.get('helo_name'),
+                data.get('sender'),
+                data.get('recipient'),
+                data.get('queue_id'),)
+            )
             return (None, None)
 
-        syslog.syslog('Initial greylisting: REMOTEIP="%s" HELO="%s" SENDER="%s" '
-                'RECIPIENT="%s" QUEUEID="%s"'
-                % (data.get('client_address'),
-                    data.get('helo_name'),
-                    data.get('sender'),
-                    data.get('recipient'),
-                    data.get('queue_id'),))
+        config.log_msg('Initial greylisting: REMOTEIP="%s" HELO="%s" SENDER="%s" RECIPIENT="%s" QUEUEID="%s"' % (
+            data.get('client_address'),
+            data.get('helo_name'),
+            data.get('sender'),
+            data.get('recipient'),
+            data.get('queue_id'),)
+        )
         
         return ('defer', 'Service unavailable, greylisted (http://projects.puremagic.com/greylisting/).')
 
@@ -175,23 +177,23 @@ def greylistcheck(data, config):
     now = time.time()
     db.greylist.update({'_id': db_data['_id']}, {"$set": {'changed': now}}, upsert=True)
     if allowed_from > now and not config['defaultSeedOnly']:
-        syslog.syslog('Pending greylisting: REMOTEIP="%s" HELO="%s" SENDER="%s" '
-                'RECIPIENT="%s" QUEUEID="%s"'
-                % (data.get('client_address'),
-                    data.get('helo_name'),
-                    data.get('sender'),
-                    data.get('recipient'),
-                    data.get('queue_id'),))
+        config.log_msg('Pending greylisting: REMOTEIP="%s" HELO="%s" SENDER="%s" RECIPIENT="%s" QUEUEID="%s"' % (
+            data.get('client_address'),
+            data.get('helo_name'),
+            data.get('sender'),
+            data.get('recipient'),
+            data.get('queue_id'),)
+        )
 
         return ('defer', 'Service unavailable, greylisted (http://projects.puremagic.com/greylisting/).')
 
-    syslog.syslog('Allowed greylisting: REMOTEIP="%s" HELO="%s" SENDER="%s" '
-            'RECIPIENT="%s" QUEUEID="%s"'
-            % (data.get('client_address'),
-                data.get('helo_name'),
-                data.get('sender'),
-                data.get('recipient'),
-                data.get('queue_id')))
+    config.log_msg('Allowed greylisting: REMOTEIP="%s" HELO="%s" SENDER="%s" RECIPIENT="%s" QUEUEID="%s"' % (
+            data.get('client_address'),
+            data.get('helo_name'),
+            data.get('sender'),
+            data.get('recipient'),
+            data.get('queue_id'),)
+    )
 
     return (None, None)
 
@@ -219,13 +221,13 @@ def blackholecheck(data, config):
 
     # finally check if sender is blocked
     if db.blackhole_ips.find(ip_data).count() > 0:
-        syslog.syslog('Blackholed: REMOTEIP="%s" HELO="%s" SENDER="%s" '
-                'RECIPIENT="%s" QUEUEID="%s"'
-                % (data.get('client_address'),
-                    data.get('helo_name'),
-                    data.get('sender'),
-                    data.get('recipient'),
-                    data.get('queue_id')))
+        config.log_msg('Blackholed: REMOTEIP="%s" HELO="%s" SENDER="%s" RECIPIENT="%s" QUEUEID="%s"' % (
+                data.get('client_address'),
+                data.get('helo_name'),
+                data.get('sender'),
+                data.get('recipient'),
+                data.get('queue_id'),)
+        )
 
         return ('reject', 'Service unavailable, blackholed.')
 
