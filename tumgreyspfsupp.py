@@ -17,7 +17,7 @@ except ImportError:
     ip_network = IPNetwork
 
 #  default values
-default_config_file = '/Users/jschrewe/webdesign/tumgreyspf/tumgreyspf.conf'
+default_config_file = '/etc/tumgreyspf/tumgreyspf.conf'
 
 default_config = {
     'debugLevel': 0,
