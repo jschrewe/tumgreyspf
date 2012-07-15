@@ -6,15 +6,12 @@
 #  Copyright (c) 2004-2007, Sean Reifschneider, tummy.com, ltd.
 #  All Rights Reserved
 #  <jafo@tummy.com>
+#
+#  Jan Schrewe <jan@schafproductions.com>, 2012
 
 import sys
-from pprint import pprint
+from pprint import pformat
 from tumgreyspfsupp import load_config
-
-#  check arguments
-if len(sys.argv) != 2:
-	print 'ERROR: Configuration file must be specified as a command-line argument.'
-	sys.exit(2)
 
 # Try to load config to pretty print possible exceptions
 try:
@@ -24,10 +21,14 @@ except Exception, e:
     print '\nError reading config file "%s": %s\n' % (sys.argv[1], value)
     sys.exit(1)
 
-config = load_config(filename=sys.argv[1], config={}, use_syslog=False, use_stderr=True)
+config = load_config(config={}, use_syslog=False, use_stderr=True)
 
 print '\nConfiguration data:\n'
-pprint(config._config)
+for k, v in config:
+    if k in ['spfwhitelist', 'greylistwhitelist',]:
+        print "%s: %s" % (k, str(v))
+    else:
+        print "%s: %s" % (k, pformat(v))
 print '\nConfig file "%s" successfully loaded.\n' % sys.argv[1]
 
 sys.exit(1)

@@ -16,6 +16,7 @@ setup(
         'tumgreyspf-clean',
         'tumgreyspf-stat',
         'tumgreyspf-configtest',
+        'tumgreyspf-whitelist',
     ],
     data_files = [
         ('/etc/tumgreyspf/', ['tumgreyspf.conf', ]),

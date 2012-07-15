@@ -1,8 +1,10 @@
 # tumgreyspf README
 
-Sean Reifschneider <jafo@tummy.com>
-**Homepage:** http://www.tummy.com/Community/software/tumgreyspf/
-**Code/bugfixes:** https://github.com/linsomniac/tumgreyspf
+Based on **tumgreyspf** by Sean Reifschneider (<jafo@tummy.com>),
+Homepage: http://www.tummy.com/Community/software/tumgreyspf/,
+Code/bugfixes: https://github.com/linsomniac/tumgreyspf
+
+**Note:** This version is heavily modified and uses mongo db as a backend. See below for more information.
 
 --------------------------------------------------------------
 
@@ -10,12 +12,11 @@ This is tumgreyspf, an external policy checker for the postfix mail
 server.  It can optionally greylist and/or use spfquery to check SPF
 records to determine if email should be accepted by your server.
 
-It uses the file-system as it's database, no additional database is
-required to use it.
+It uses mongo db as it's database backend.
 
 ## LICENSE
 
-   tumgreyspf is licensed under the GPL.
+   tumgreyspf is licensed under the GPL v2.
 
 ## BENEFITS
 
@@ -36,51 +37,26 @@ remain effective.
 
 ### Easy Setup
 
-Installation should be as easy as installing an RPM or Debian package
-on your system.  There are few additional requirements.  Extensive
-time has been devoted to installation automation and documentation.
+Installation should be as easy as running ``python setup.py install``, provided there is a running mongo db.
 
 ## REQUIREMENTS
 
-   * [Python](http://www.python.org/)
+   * [Python](http://www.python.org/) (tested with 2.7)
 
    * [Postfix 2.1 or above](http://www.postfix.org/)
 
-   * *Optional:* [spfquery](http://spf.pobox.com/downloads.html) or [pyspf](http://www.wayforward.net/spf/)
+   * [pyspf](http://pypi.python.org/pypi/pyspf/)
 
-## NOTE BEFORE YOU USE TUMGREYSPF
+   * [ipaddr](http://pypi.python.org/pypi/ipaddr/)
 
-tumgreyspf stores the greylist data in the file-system using many small
-files.  This has a few benefits, namely that you do not need to install
-or configure any database software.  It also makes you immune to to
-database corruption issues that other greylist systems have.
-
-However, this does mean that if not configured properly you may
-experience extremely poor performance. There are details in one of my
-blog posts:
-
-    http://www.tummy.com/journals/entries/jafo_20051001_003419
-
-However, the short answer is that you need to be careful about blocking
-known bad recipient and sender addresses in Postfix before handing
-messages off to tumgreyspf, and you probably should configure SPF to be
-checked before greylisting.
-
-If you are going to be storing your tumgreyspf database on an "ext2" or
-"ext3" file-system, you have to be particularly careful about this
-problem.
-
-I have run a number of production e-mail servers using this with
-extremely good results and absolutely no problems, however I do
-acknowledge that there is a potential for problems.  Read the above URL
-for more details on preventing these problems.
-
-Over the last 18 months that it's been in use, and more than a year that
-it's been publicly available, I've received many responses saying that
-it worked great, and one blog post reporting the above problems.
-tumgreyspf may not be for everyone, but many people do find it useful.
+   * [pymongo](http://pypi.python.org/pypi/pymongo/)
 
 ## QUICK-START INSTALL
+
+To install tumgreyspf run ``python setup.py install`` in the tumgreyspf 
+source directory. The configuration file is installed in 
+``/etc/tumgreyspf/tumgreyspf.conf`` and should be fairly self explanatory.
+
 
 There is a script called "tumgreyspf-install" provided with this
 software.  I have had a report that it didn't work, so I would recommend

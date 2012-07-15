@@ -1,0 +1,46 @@
+#!/usr/bin/env python
+
+from argparse import ArgumentParser, ArgumentTypeError
+from tumgreyspfsupp import prepare_start
+try:
+    from ipaddr import ip_network
+except ImportError:
+    # No PEP 3144 interface yet. Fall back.
+    from ipaddr import IPNetwork
+    ip_network = IPNetwork
+
+def ip_type(arg):
+    try:
+        ip = ip_network(arg)
+    except ValueError:
+        msg = "%s is not a valid IP address" % arg
+        raise ArgumentTypeError(msg)
+    return ip
+        
+parser = ArgumentParser(description="Manage whitelisted IP addresses and networks.")
+
+parser.add_argument("action", help="Action to take.", choices=['add', 'remove', 'list'])
+parser.add_argument("queue", help="Queue to use.", choices=['spf', 'greylist'])
+parser.add_argument("ip", help="IP address or network.", type=ip_type, nargs='?')
+
+args = parser.parse_args()
+
+config = prepare_start(use_syslog=False, use_stderr=True)
+
+if args.queue == 'spf':
+    list = config['spfwhitelist']
+elif args.queue == 'greylist':
+    list = config['greylistwhitelist']
+
+if args.action == 'add':
+    if args.ip is None:
+        parser.error("IP address or network to add is required.")
+    list.append(args.ip)
+elif args.action == 'remove':
+    if args.ip is None:
+        parser.error("IP address or network to remove is required.")
+    list.remove(args.ip)
+elif args.action == 'list':
+    print "Whitelisted addresses in %s: %s" % (args.queue, str(list))
+    
+    

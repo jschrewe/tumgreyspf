@@ -1,13 +1,17 @@
 #!/usr/bin/env python
-# vim: ts=3 sw=3 ai
 #
 #  Log information about incoming SMTP connections.
 #
 #  Copyright (c) 2004-2007, Sean Reifschneider, tummy.com, ltd.
 #  All Rights Reserved
 #  <jafo@tummy.com>
+#
+#  Jan Schrewe <jan@schafproductions.com>, 2012
 
-import sys, time, spf
+import sys
+
+from time import time
+from spf import check2 as spf_check
 
 try:
     from ipaddr import ip_address
@@ -19,7 +23,7 @@ except ImportError:
 from tumgreyspfsupp import prepare_start, DataDict, ParseException, InstanceCheck
 
 # read config and prepare for start up
-config, db = prepare_start(use_syslog=True, use_stderr=False)
+config = prepare_start(use_syslog=True, use_stderr=False)
 
 
 def skip_ip(ip, ipaddrs):
@@ -44,12 +48,22 @@ def spfcheck(data, config):
         return (None, None)
     
     if skip_ip(ip, config['spfWhiteList']):
+        detail = 'REMOTEIP="%s" HELO="%s" SENDER="%s" RECIPIENT="%s" QUEUEID="%s"' % (
+            data.get('client_address'),
+            data.get('helo_name'),
+            data.get('sender'),
+            data.get('recipient'),
+            data.get('queue_id'),
+        )
+        config.log_msg("Whitelisted (spf check): %s" % detail)
         return (None, 'SPF check N/A for whitelisted connections')
 
     try:
         sender = data['sender']
+        identity = 'mailfrom'
     except KeyError:
         sender = None
+        identity = 'helo'
     
     try:
         helo = data['helo_name']
@@ -66,161 +80,136 @@ def spfcheck(data, config):
 
     #  use the pySPF 2.0/RFC 4408 interface
     try:
-        spfResult, spfReason = spf.check2(i=ip, s=sender, h=helo)
-    except Exception, e:
-        return ('prepend', 'TumGreySPF-Warning: SPF Check failed: %s' % str(e))
+        spf_result, spf_reason = spf_check(i=ip, s=sender, h=helo)
+    except Exception as e:
+        return ('prepend', 'TumGreySPF-Warning: SPF Check failed: %s' % e)
 
-    spfResult = spfResult.strip().lower().capitalize()
-    spfReason = spfReason.strip()
+    spf_result = spf_result.strip().lower().capitalize()
+    spf_reason = spf_reason.strip()
         
-    if spfResult == 'None':
+    if spf_result == 'None':
         #  allow checking to continue on to other checkers if no SPF
         return (None, None)
         
-    if sender is not None:
-        identity = 'mailfrom'
-    else:
-        identity = 'helo'
-        
-    spfDetail = 'identity=%s; client-ip=%s; helo=%s; envelope-from=%s; receiver=%s; ' % (
+    spf_detail = 'identity=%s; client-ip=%s; helo=%s; envelope-from=%s; receiver=%s; ' % (
         identity,
         data.get('client_address'),
         data.get('helo_name'),
         data.get('sender'),
         data.get('recipient'),
     )
-    config.log_msg('%s: %s; %s' % (spfReason, queue_id, spfDetail))
+    config.log_msg('%s: %s; %s' % (spf_reason, queue_id, spf_detail))
+    
+    spf_report = '%s SPF Reports: %s' % (queue_id, spf_reason)
         
-    if spfResult == 'Fail':
-        return ('reject', '%s SPF Reports: %s' % (queue_id, spfReason))
+    if spf_result == 'Fail':
+        return ('reject', spf_report)
 
-    if spfResult == 'Permerror' and not config['spfAcceptOnPermError']:
-        return ('reject', '%s SPF Reports: %s' % (queue_id, spfReason))
+    if spf_result == 'Permerror' and not config['spfAcceptOnPermError']:
+        return ('reject', spf_report)
 
-    if spfResult == 'Temperror':
-        return ('defer', '%s SPF Reports: %s' % (queue_id, spfReason))
+    if spf_result == 'Temperror':
+        return ('defer', spf_report)
     
     # SPF validated mails can pass
-    if spfResult == 'Pass' and config['spfBypassGreylist']:
-        return 'pass', '%s SPF Reports: %s' % (queue_id, spfReason)
+    if spf_result == 'Pass' and config['spfBypassGreylist']:
+        return ('pass', spf_report)
 
-    return ('prepend', 'Received-SPF: %s (%s) %s' % (spfResult, spfReason, spfDetail))
+    return ('prepend', 'Received-SPF: %s (%s) %s' % (spf_result, spf_reason, spf_detail))
 
 
 def greylistcheck(data, config):
     greylist_data = {}
-    search_criteria = {} 
     
     try:
         ip = data['client_address']
     except KeyError:
         return (None, None)
     
+    greylist_detail = 'REMOTEIP="%s" HELO="%s" SENDER="%s" RECIPIENT="%s" QUEUEID="%s"' % (
+        data.get('client_address'),
+        data.get('helo_name'),
+        data.get('sender'),
+        data.get('recipient'),
+        data.get('queue_id'),
+    )
+    
     # check if client is whitelisted
     if skip_ip(ip, config['greylistWhiteList']):
+        config.log_msg("Whitelisted (greylist check): %s" % greylist_detail)
         return (None, 'greylist check N/A for whitelisted connections') 
     
-    # meta data used to generate stats
-    greylist_data['client_ip'] = int(ip_address(ip))
-    
     if config['ignoreLastByte']:
-        ipBytes = ip.split('.') 
-        ipBytes[-1] = '0'
-        ip = '.'.join(ipBytes)
+        ip_bytes = ip.split('.') 
+        ip_bytes[-1] = '0'
+        ip = '.'.join(ip_bytes)
     
     greylist_data['ip'] = int(ip_address(ip))
-    search_criteria['ip'] = int(ip_address(ip))
     
     if not config['greylistByIPOnly']:
         try:
             greylist_data['sender'] = data['sender']
-            search_criteria['sender'] = data['sender']
             greylist_data['recipient'] = data['recipient']
-            search_criteria['recipient'] = data['recipient']
         except KeyError:
             return (None, None)
 
-    allowTime = config['GREYLISTTIME']
-
     criteria = greylist_data.copy()
-    db_data = db.greylist.find(search_criteria)
+    db_data = config.db.greylist.find(criteria)
+    
+    # meta data used to generate stats
+    greylist_data['client_ip'] = int(ip_address(data['client_address']))
 
     if db_data.count() == 0: 
-        greylist_data['changed'] = time.time()
-        greylist_data['allowed_from'] = greylist_data['changed'] + allowTime
+        greylist_data['changed'] = time()
+        greylist_data['allowed_from'] = greylist_data['changed'] + config['GREYLISTTIME']
         
         # ensure there are no races in case data got inserted between check and now
-        db.greylist.update(criteria, {"$set": greylist_data}, upsert=True)
+        config.db.greylist.update(criteria, {"$set": greylist_data}, upsert=True)
 
         if config['defaultSeedOnly']:
-            config.log_msg('Training greylisting: REMOTEIP="%s" HELO="%s" SENDER="%s" RECIPIENT="%s" QUEUEID="%s"' % (
-                data.get('client_address'),
-                data.get('helo_name'),
-                data.get('sender'),
-                data.get('recipient'),
-                data.get('queue_id'),)
-            )
+            config.log_msg('Training greylisting: %s' %  greylist_detail)
             return (None, None)
 
-        config.log_msg('Initial greylisting: REMOTEIP="%s" HELO="%s" SENDER="%s" RECIPIENT="%s" QUEUEID="%s"' % (
-            data.get('client_address'),
-            data.get('helo_name'),
-            data.get('sender'),
-            data.get('recipient'),
-            data.get('queue_id'),)
-        )
-        
+        config.log_msg('Initial greylisting: %s' %  greylist_detail)
         return ('defer', 'Service unavailable, greylisted (http://projects.puremagic.com/greylisting/).')
 
+    # we only allow one entry per search
     db_data = db_data[0]
-    allowed_from = db_data['allowed_from']
-    now = time.time()
-    db.greylist.update({'_id': db_data['_id']}, {"$set": {'changed': now}}, upsert=True)
-    if allowed_from > now and not config['defaultSeedOnly']:
-        config.log_msg('Pending greylisting: REMOTEIP="%s" HELO="%s" SENDER="%s" RECIPIENT="%s" QUEUEID="%s"' % (
-            data.get('client_address'),
-            data.get('helo_name'),
-            data.get('sender'),
-            data.get('recipient'),
-            data.get('queue_id'),)
-        )
-
+    
+    now = time()
+    
+    config.db.greylist.update({'_id': db_data['_id']}, {"$set": {'changed': now}}, upsert=True)
+    
+    if db_data['allowed_from'] > now and not config['defaultSeedOnly']:
+        config.log_msg('Pending greylisting: %s' %  greylist_detail)
         return ('defer', 'Service unavailable, greylisted (http://projects.puremagic.com/greylisting/).')
 
-    config.log_msg('Allowed greylisting: REMOTEIP="%s" HELO="%s" SENDER="%s" RECIPIENT="%s" QUEUEID="%s"' % (
-            data.get('client_address'),
-            data.get('helo_name'),
-            data.get('sender'),
-            data.get('recipient'),
-            data.get('queue_id'),)
-    )
-
+    config.log_msg('Allowed greylisting: %s' %  greylist_detail)
     return (None, None)
 
 
 def blackholecheck(data, config):
     try:
         ip = data['client_address']
+        ip = int(ip_address(ip))
     except KeyError:
         return (None, None)
-    
-    ip_data = {'ip': int(ip_address(ip)),}
     
     try:
-        recipient = data.get('recipient')
+        recipient = data['recipient']
     except KeyError:
         return (None, None)
     
-    bh_data = {'address': recipient,}
+    ip_data = {'ip': ip,}
     
     # check if mail goes to a "forbidden" address
-    db_adresses = db.blackhole_adresses.find(bh_data)
+    db_adresses = config.db.blackhole_adresses.find({'address': recipient,})
     if db_adresses.count() > 0:
         # if it does then blacklist sender
-        db.blackhole_ips.update(ip_data, ip_data, upsert=True)
+        config.db.blackhole_ips.update(ip_data, ip_data, upsert=True)
 
     # finally check if sender is blocked
-    if db.blackhole_ips.find(ip_data).count() > 0:
+    if config.db.blackhole_ips.find(ip_data).count() > 0:
         config.log_msg('Blackholed: REMOTEIP="%s" HELO="%s" SENDER="%s" RECIPIENT="%s" QUEUEID="%s"' % (
                 data.get('client_address'),
                 data.get('helo_name'),
@@ -228,7 +217,6 @@ def blackholecheck(data, config):
                 data.get('recipient'),
                 data.get('queue_id'),)
         )
-
         return ('reject', 'Service unavailable, blackholed.')
 
     return (None, None)
@@ -252,40 +240,36 @@ while 1:
     if line is '':
         config.log_msg('Found the end of entry', 4)
 
-        checkerValue = None
-        checkerReason = None
+        checker_val = None
+        checker_reason = None
         for checker in config['checkers']:
             if checker == 'greylist':
-                checkerValue, checkerReason = greylistcheck(data, config)
-                if checkerValue is not None: 
+                checker_val, checker_reason = greylistcheck(data, config)
+                if checker_val is not None: 
                     break
             elif checker == 'spf':
-                checkerValue, checkerReason = spfcheck(data, config)
+                checker_val, checker_reason = spfcheck(data, config)
                 if config['spfSeedOnly']:
-                    checkerValue = None
-                    checkerReason = None
-                if checkerValue is not None and checkerValue != 'prepend': 
+                    checker_val, checker_reason = None, None
+                if checker_val is not None and checker_val != 'prepend': 
                     break
             elif checker == 'blackhole':
-                checkerValue, checkerReason = blackholecheck(data, config)
-                if checkerValue is not None: 
+                checker_val, checker_reason = blackholecheck(data, config)
+                if checker_val is not None: 
                     break
 
-        if checkerValue == 'reject':
-            sys.stdout.write('action=550 %s\n\n' % checkerReason)
+        if checker_val == 'reject':
+            print 'action=550 %s\n\n' % checker_reason
             
-        elif checkerValue == 'prepend':
-            # Only prepend data if instance has not been seen.
-            if instance_seen(data):
-                sys.stdout.write('action=dunno\n\n')
-            else:
-                sys.stdout.write('action=prepend %s\n\n' % checkerReason)
+        # Only prepend data if instance has not been seen.
+        elif checker_val == 'prepend' and not instance_seen(data):
+            print 'action=prepend %s\n\n' % checker_reason
                 
-        elif checkerValue == 'defer':
-            sys.stdout.write('action=defer_if_permit %s\n\n' % checkerReason) 
+        elif checker_val == 'defer':
+            print 'action=defer_if_permit %s\n\n' % checker_reason 
                
         else:
-            sys.stdout.write('action=dunno\n\n')
+            print 'action=dunno\n\n'
 
         sys.stdout.flush()
         data = DataDict()
@@ -295,4 +279,3 @@ while 1:
         data.parse_line(line)
     except ParseException:
         config.log_msg('ERROR: Could not match line "%s"' % line)
-        continue
